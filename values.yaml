@@ -1,0 +1,99 @@
+# Immich – self-hosted photo and video backup (official chart + external PostgreSQL + Valkey/Redis + 1Password).
+# DB credentials come from 1Password; DB host/port/database are set here (or override with envFrom for all from secret).
+# See README for dependencies (external Postgres, PVC, 1Password) and deployment hold-off.
+
+# ---- Immich (official subchart) ----
+immich:
+  # External PostgreSQL: set host, port, database name. DB_USERNAME and DB_PASSWORD come from secret.
+  controllers:
+    main:
+      containers:
+        main:
+          env:
+            # Required: set to your external PostgreSQL host (e.g. postgres.example.svc.cluster.local)
+            DB_HOSTNAME: ""
+            DB_PORT: "5432"
+            DB_DATABASE_NAME: immich
+            TZ: US/Pacific
+          envFrom:
+            - secretRef:
+                name: immich-db-credentials
+
+  # Chart's "immich" block: persistence, metrics, configuration
+  immich:
+    persistence:
+      library:
+        existingClaim: immich-library
+      configuration: {}
+      configurationKind: ConfigMap
+    metrics:
+      enabled: false
+
+  server:
+    enabled: true
+    controllers:
+      main:
+        containers:
+          main:
+            image:
+              repository: ghcr.io/immich-app/immich-server
+              pullPolicy: IfNotPresent
+            envFrom:
+              - secretRef:
+                  name: immich-db-credentials
+        ingress:
+          main:
+            enabled: true
+            ingressClassName: nginx
+            annotations:
+              nginx.ingress.kubernetes.io/proxy-body-size: "0"
+              external-dns.alpha.k8s.io/target: expectedbehaviors.com
+              nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+              nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+            hosts:
+              - host: immich.expectedbehaviors.com
+                paths:
+                  - path: /
+                    pathType: Prefix
+            tls: []
+    service:
+      main:
+        identifier: main
+
+  machine-learning:
+    enabled: true
+    controllers:
+      main:
+        containers:
+          main:
+            image:
+              repository: ghcr.io/immich-app/immich-machine-learning
+              pullPolicy: IfNotPresent
+            env:
+              TRANSFORMERS_CACHE: /cache
+              HF_XET_CACHE: /cache/huggingface-xet
+              MPLCONFIGDIR: /cache/matplotlib-config
+        persistence:
+          cache:
+            enabled: true
+            size: 10Gi
+            type: emptyDir
+            accessMode: ReadWriteMany
+
+  # In-chart Valkey (Redis). Set valkey.enabled: false and set REDIS_HOSTNAME (and optional REDIS_PORT/REDIS_PASSWORD) in env to use a dedicated external Redis.
+  valkey:
+    enabled: true
+    persistence:
+      data:
+        enabled: true
+        size: 1Gi
+        type: emptyDir
+        accessMode: ReadWriteOnce
+
+# ---- 1Password: sync item into K8s secret for Immich DB credentials (external Postgres) ----
+onepassworditem:
+  secrets:
+    immich:
+      - item: vaults/Kubernetes/items/immich-db-credentials
+        name: immich-db-credentials
+        type: Opaque
