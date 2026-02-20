@@ -12,15 +12,15 @@ Deploy or provision the following **before** installing Immich or enabling the A
 
 | Dependency | Required | Notes |
 |------------|----------|--------|
-| **External PostgreSQL** | Yes | Create a database and user for Immich. Set `immich.controllers.main.containers.main.env.DB_HOSTNAME` (and optionally `DB_PORT`, `DB_DATABASE_NAME`) in values to point to your DB host. Credentials (`DB_USERNAME`, `DB_PASSWORD`) come from the 1Password-backed secret. |
-| **PersistentVolumeClaim `immich-library`** | Yes | Create a PVC in the release namespace for photo/video storage, or set `immich.immich.persistence.library.existingClaim` to an existing PVC name. |
+| **External PostgreSQL** | Yes | **One database server** for homelab (same as Nextcloud): host `postgresql-rw.postgresql.svc.cluster.local`. Create an **individual database** `immich` and a dedicated user; credentials (`DB_USERNAME`, `DB_PASSWORD`) come from the 1Password-backed secret `immich-db-credentials`. |
+| **PersistentVolumeClaim** (library) | Yes | Default: share **nextcloud-data** PVC with Nextcloud using `existingClaim: nextcloud-data` and `subPath: immich-library` so the Immich library lives in a fixed directory on the same volume. Ensure the chart supports `subPath` for library, or create a dedicated `immich-library` PVC. |
 | **1Password item → secret `immich-db-credentials`** | Yes | Item must contain `DB_USERNAME` and `DB_PASSWORD` so the onepassworditem subchart can create the secret. See [1Password item](#1password-item-and-secret-keys) below. |
 | **External Redis (optional)** | No | By default the chart runs Valkey (Redis-compatible) in-chart. For a dedicated Redis, set `immich.valkey.enabled: false` and add `REDIS_HOSTNAME` (and optionally `REDIS_PORT`, `REDIS_PASSWORD`) to `immich.controllers.main.containers.main.env` and/or the secret. |
 
-### Dedicated vs in-chart dependencies
+### One database server, individual databases
 
-- **PostgreSQL:** External only. This chart does not include a Postgres chart; use your own instance (e.g. cloud, dedicated cluster, or shared DB server).
-- **Redis/Valkey:** Default is in-chart Valkey. If you prefer a **dedicated Redis** (e.g. shared across apps or managed), disable Valkey and set `REDIS_HOSTNAME` (and related env) to your Redis host.
+- **PostgreSQL:** This chart uses the **same PostgreSQL server as Nextcloud**: `postgresql-rw.postgresql.svc.cluster.local` (namespace `postgresql`). Create a separate **database** `immich` and a dedicated **user** with access to it (e.g. via CloudNativePG or init scripts). Do not use the same DB name as Nextcloud.
+- **Redis/Valkey:** Default is in-chart Valkey. If you prefer a **dedicated Redis** (e.g. `redis-master.redis.svc.cluster.local`), disable Valkey and set `REDIS_HOSTNAME` (and related env) to your Redis host.
 
 ---
 
@@ -73,15 +73,16 @@ On the **external PostgreSQL** side: create a database (e.g. `immich`) and a use
 
 **Required (external Postgres):**
 
-- **`immich.controllers.main.containers.main.env.DB_HOSTNAME`** – Host of your PostgreSQL (e.g. `postgres.example.svc.cluster.local` or an external hostname). Default is empty; you must set it.
+- **`immich.controllers.main.containers.main.env.DB_HOSTNAME`** – Set to **`postgresql-rw.postgresql.svc.cluster.local`** when using the homelab shared PostgreSQL server (same as Nextcloud). Override only if using a different DB host.
 - **`immich.controllers.main.containers.main.env.DB_PORT`** – Port (default `5432`).
-- **`immich.controllers.main.containers.main.env.DB_DATABASE_NAME`** – Database name (default `immich`).
+- **`immich.controllers.main.containers.main.env.DB_DATABASE_NAME`** – Database name (default `immich`). Must be an **individual database** on the shared server (do not use `nextcloud`).
 
 **Optional:**
 
 - **`onepassworditem.secrets.immich[0].item`** – 1Password item path.
 - **`immich.server.controllers.main.ingress.main.hosts[0].host`** – Ingress host (default `immich.expectedbehaviors.com`).
-- **`immich.immich.persistence.library.existingClaim`** – PVC for the photo library (default `immich-library`).
+- **`immich.immich.persistence.library.existingClaim`** – PVC for the photo library. Default in this chart: **nextcloud-data** (shared with Nextcloud).
+- **`immich.immich.persistence.library.subPath`** – Subdirectory on that PVC for Immich (default **immich-library**). Ensures Immich and Nextcloud do not conflict on the same volume; the subPath directory must exist or be created (e.g. by the chart if it supports subPath).
 - **External Redis:** Set `immich.valkey.enabled: false` and add `REDIS_HOSTNAME` (and optionally `REDIS_PORT`, `REDIS_PASSWORD`) to env or the secret.
 
 ---
@@ -106,6 +107,6 @@ When dependencies are ready (external PostgreSQL, PVC, 1Password item, and optio
 1. **External PostgreSQL:** Database and user created; note host, port, database name.
 2. **1Password:** Item with **DB_USERNAME** and **DB_PASSWORD**; set `onepassworditem.secrets.immich[0].item` in values.
 3. **Values:** Set **DB_HOSTNAME** (and DB_PORT/DB_DATABASE_NAME if different from defaults).
-4. **PVC:** Create **immich-library** (or set `immich.immich.persistence.library.existingClaim`).
+4. **PVC:** Use **nextcloud-data** with **subPath: immich-library** (default in values) to share the photo volume with Nextcloud, or create a dedicated **immich-library** PVC and set `existingClaim` accordingly.
 5. **Optional:** Dedicated Redis – set `immich.valkey.enabled: false` and REDIS_* env.
 6. **ArgoCD:** Uncomment the immich application in config when ready to deploy.
