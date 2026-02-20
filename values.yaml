@@ -1,17 +1,16 @@
 # Immich – self-hosted photo and video backup (official chart + external PostgreSQL + Valkey/Redis + 1Password).
-# DB credentials come from 1Password; DB host/port/database are set here (or override with envFrom for all from secret).
-# See README for dependencies (external Postgres, PVC, 1Password) and deployment hold-off.
+# One database server (same as Nextcloud): postgresql-rw.postgresql.svc.cluster.local; individual DBs (nextcloud, immich, …).
+# DB credentials from 1Password (secret immich-db-credentials). See README for dependencies and deployment hold-off.
 
 # ---- Immich (official subchart) ----
 immich:
-  # External PostgreSQL: set host, port, database name. DB_USERNAME and DB_PASSWORD come from secret.
+  # External PostgreSQL: same host as Nextcloud; individual database "immich". DB_USERNAME/DB_PASSWORD from 1Password.
   controllers:
     main:
       containers:
         main:
           env:
-            # Required: set to your external PostgreSQL host (e.g. postgres.example.svc.cluster.local)
-            DB_HOSTNAME: ""
+            DB_HOSTNAME: "postgresql-rw.postgresql.svc.cluster.local"
             DB_PORT: "5432"
             DB_DATABASE_NAME: immich
             TZ: US/Pacific
@@ -22,8 +21,10 @@ immich:
   # Chart's "immich" block: persistence, metrics, configuration
   immich:
     persistence:
+      # Share nextcloud-data PVC with Nextcloud: same volume, fixed subPath so Immich library lives in a dedicated directory and does not conflict with Nextcloud files. Create the subPath directory on the volume if needed (e.g. via init job or manually).
       library:
-        existingClaim: immich-library
+        existingClaim: nextcloud-data
+        subPath: immich-library
       configuration: {}
       configurationKind: ConfigMap
     metrics:
