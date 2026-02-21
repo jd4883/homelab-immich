@@ -12,14 +12,14 @@ Deploy or provision the following **before** installing Immich or enabling the A
 
 | Dependency | Required | Notes |
 |------------|----------|--------|
-| **External PostgreSQL** | Yes | **One database server** for homelab (same as Nextcloud): host `postgresql-rw.postgresql.svc.cluster.local`. Create an **individual database** `immich` and a dedicated user; credentials (`DB_USERNAME`, `DB_PASSWORD`) come from the 1Password-backed secret `immich-db-credentials`. |
+| **External PostgreSQL** | Yes | **One database server** for homelab (same as Nextcloud): host `postgresql-rw.postgresql.svc.cluster.local`. Create an **individual database** `immich`; credentials use the **same** 1Password item as the Postgres cluster (`postgresql` / `password`) via External Secrets → secret `immich-db-credentials` (DB_USERNAME=postgres). |
 | **PersistentVolumeClaim** (library) | Yes | Default: share **nextcloud-data** PVC with Nextcloud using `existingClaim: nextcloud-data` and `subPath: immich-library` so the Immich library lives in a fixed directory on the same volume. Ensure the chart supports `subPath` for library, or create a dedicated `immich-library` PVC. |
-| **1Password item → secret `immich-db-credentials`** | Yes | Item must contain `DB_USERNAME` and `DB_PASSWORD` so the onepassworditem subchart can create the secret. See [1Password item](#1password-item-and-secret-keys) below. |
+| **External Secrets Operator** | Yes | ClusterSecretStore (e.g. **onepassword-connect**). The chart creates `immich-db-credentials` from the same 1Password item as the Postgres cluster (**postgresql**, property **password**). No separate 1Password item for Immich DB. |
 | **External Redis (optional)** | No | By default the chart runs Valkey (Redis-compatible) in-chart. For a dedicated Redis, set `immich.valkey.enabled: false` and add `REDIS_HOSTNAME` (and optionally `REDIS_PORT`, `REDIS_PASSWORD`) to `immich.controllers.main.containers.main.env` and/or the secret. |
 
 ### One database server, individual databases
 
-- **PostgreSQL:** This chart uses the **same PostgreSQL server as Nextcloud**: `postgresql-rw.postgresql.svc.cluster.local` (namespace `postgresql`). Create a separate **database** `immich` and a dedicated **user** with access to it (e.g. via CloudNativePG or init scripts). Do not use the same DB name as Nextcloud.
+- **PostgreSQL:** This chart uses the **same PostgreSQL server as Nextcloud**: `postgresql-rw.postgresql.svc.cluster.local` (namespace `postgresql`). Create a separate **database** `immich`; Immich connects as the **postgres** superuser using the same password as the Postgres cluster bootstrap (1Password item **postgresql**). Do not use the same DB name as Nextcloud.
 - **Redis/Valkey:** Default is in-chart Valkey. If you prefer a **dedicated Redis** (e.g. `redis-master.redis.svc.cluster.local`), disable Valkey and set `REDIS_HOSTNAME` (and related env) to your Redis host.
 
 ---
@@ -27,45 +27,27 @@ Deploy or provision the following **before** installing Immich or enabling the A
 ## Chart contents
 
 - **Immich server + machine-learning:** Upstream `immich-app/immich-charts` (subchart `immich`). Configured for external DB (env + envFrom) and in-chart Valkey or external Redis.
-- **Secrets:** [onepassworditem](https://github.com/vquie/helm-charts) subchart syncs a 1Password item into a Kubernetes secret `immich-db-credentials` used for `DB_USERNAME` and `DB_PASSWORD`.
+- **Secrets:** ExternalSecret syncs the **postgres** password from the same 1Password item as the Postgres cluster (**postgresql** / **password**) into Kubernetes secret `immich-db-credentials` with `DB_USERNAME=postgres` and `DB_PASSWORD`. Single source of truth; no separate 1Password item for Immich DB.
 
 ---
 
-## 1Password item and secret keys
+## DB credentials (same as Postgres cluster)
 
-The chart expects a Kubernetes secret named **`immich-db-credentials`** with at least:
+The chart creates a Kubernetes secret **`immich-db-credentials`** with `DB_USERNAME=postgres` and `DB_PASSWORD` using **External Secrets**: it reads from the **same** 1Password item as the Postgres cluster bootstrap.
 
-| Key           | Description |
-|---------------|-------------|
-| `DB_USERNAME` | Database username for Immich (e.g. `immich` or `postgres`). |
-| `DB_PASSWORD` | Database password for that user. |
+| Source | Details |
+|--------|---------|
+| **1Password item** | **postgresql** (same item used by `homelab/helm/postgresql` cluster bootstrap). |
+| **Property** | **password** (postgres superuser password). |
+| **Kubernetes secret** | `immich-db-credentials` in the release namespace, keys `DB_USERNAME`, `DB_PASSWORD`. |
 
-The **onepassworditem** subchart creates this secret from a 1Password item. Create an item (e.g. in vault **Kubernetes**, name **immich-db-credentials**) and add fields whose **labels** (or names) match the keys above so they sync into the secret.
-
-In `values.yaml` the default item path is:
-
-```yaml
-onepassworditem:
-  secrets:
-    immich:
-      - item: vaults/Kubernetes/items/immich-db-credentials
-        name: immich-db-credentials
-        type: Opaque
-```
-
-Change `item` to your vault/item path so it matches your 1Password setup.
+You do **not** need a separate 1Password item for Immich. Ensure the **postgresql** item exists (for the Postgres cluster) and that External Secrets Operator and ClusterSecretStore (e.g. **onepassword-connect**) are configured; the Immich chart will create `immich-db-credentials` from it.
 
 ---
 
-## What you need to generate in 1Password
+## PostgreSQL database
 
-1. **Create a 1Password item** (e.g. **immich-db-credentials** in vault **Kubernetes**).
-2. **Add fields** that map to Kubernetes secret keys:
-   - **DB_USERNAME** – Database user for Immich (e.g. `immich` or `postgres`).
-   - **DB_PASSWORD** – That user’s password (must match the password on your external PostgreSQL).
-3. Ensure **1Password Connect** (and the Kubernetes operator, if used) can read this item and that the secret is created in the same namespace as the Immich release (e.g. **immich**).
-
-On the **external PostgreSQL** side: create a database (e.g. `immich`) and a user with access to it, using the same username and password you put in 1Password.
+No separate 1Password item is needed; see [DB credentials (same as Postgres cluster)](#db-credentials-same-as-postgres-cluster) above. On the **external PostgreSQL** side: create the database **immich** (e.g. `CREATE DATABASE immich;`). The **postgres** user already exists and is used by Immich.
 
 ---
 
@@ -79,7 +61,7 @@ On the **external PostgreSQL** side: create a database (e.g. `immich`) and a use
 
 **Optional:**
 
-- **`onepassworditem.secrets.immich[0].item`** – 1Password item path.
+- **`externalSecrets.dbCredentials`** – Override 1Password item or secret store (default: item **postgresql**, property **password**, store **onepassword-connect**).
 - **`immich.server.controllers.main.ingress.main.hosts[0].host`** – Ingress host (default `immich.expectedbehaviors.com`).
 - **`immich.immich.persistence.library.existingClaim`** – PVC for the photo library. Default in this chart: **nextcloud-data** (shared with Nextcloud).
 - **`immich.immich.persistence.library.subPath`** – Subdirectory on that PVC for Immich (default **immich-library**). Ensures Immich and Nextcloud do not conflict on the same volume; the subPath directory must exist or be created (e.g. by the chart if it supports subPath).
@@ -91,22 +73,22 @@ On the **external PostgreSQL** side: create a database (e.g. `immich`) and a use
 
 The Immich application is **not deployed by default**. In `homelab/helm/argocd/terraform/argocd-config/configs/config.yaml`, the **immich** project has `applications: []` and the application entry is commented out.
 
-When dependencies are ready (external PostgreSQL, PVC, 1Password item, and optionally external Redis), uncomment the application block so ArgoCD syncs the chart. Ensure `DB_HOSTNAME` (and any other DB/Redis overrides) are set in values or a value file used by ArgoCD.
+When dependencies are ready (external PostgreSQL with database `immich`, PVC, ESO + postgresql 1Password item, and optionally external Redis), uncomment the application block so ArgoCD syncs the chart. Ensure `DB_HOSTNAME` (and any other DB/Redis overrides) are set in values or a value file used by ArgoCD.
 
 ---
 
 ## Install (when dependencies are ready)
 
-- **Helm:** From this directory run `helm dependency update`, then e.g. `helm install immich . -n immich --create-namespace -f values.yaml`. Set `immich.controllers.main.containers.main.env.DB_HOSTNAME` (e.g. via `--set immich.controllers.main.containers.main.env.DB_HOSTNAME=your-postgres-host` or a custom values file). Ensure the `immich-db-credentials` secret exists and the `immich-library` PVC exists.
-- **ArgoCD:** Uncomment the immich application in config as above; point source repo to this chart (e.g. `homelab-immich`), path `.`. Use the same namespace and ensure the 1Password item and external DB are available.
+- **Helm:** From this directory run `helm dependency update`, then e.g. `helm install immich . -n immich --create-namespace -f values.yaml`. The chart creates `immich-db-credentials` via ExternalSecret from the **postgresql** 1Password item. Ensure the Postgres cluster and ESO are in place and the `immich` database exists.
+- **ArgoCD:** Uncomment the immich application in config as above; point source repo to this chart (e.g. `homelab-immich`), path `.`. Use the same namespace; ESO will create the secret from the postgresql item.
 
 ---
 
 ## Summary checklist (before deploying)
 
-1. **External PostgreSQL:** Database and user created; note host, port, database name.
-2. **1Password:** Item with **DB_USERNAME** and **DB_PASSWORD**; set `onepassworditem.secrets.immich[0].item` in values.
-3. **Values:** Set **DB_HOSTNAME** (and DB_PORT/DB_DATABASE_NAME if different from defaults).
+1. **External PostgreSQL:** Database **immich** created (postgres user is used; same creds as cluster bootstrap).
+2. **1Password + ESO:** Same **postgresql** item as Postgres cluster; ESO and ClusterSecretStore (e.g. onepassword-connect) create `immich-db-credentials`.
+3. **Values:** **DB_HOSTNAME** is set to `postgresql-rw.postgresql.svc.cluster.local` by default.
 4. **PVC:** Use **nextcloud-data** with **subPath: immich-library** (default in values) to share the photo volume with Nextcloud, or create a dedicated **immich-library** PVC and set `existingClaim` accordingly.
 5. **Optional:** Dedicated Redis – set `immich.valkey.enabled: false` and REDIS_* env.
 6. **ArgoCD:** Uncomment the immich application in config when ready to deploy.
