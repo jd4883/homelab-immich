@@ -1,6 +1,6 @@
 # Immich – self-hosted photo and video backup (official chart + external PostgreSQL + Valkey/Redis + 1Password).
 # One database server (same as Nextcloud): postgresql-rw.postgresql.svc.cluster.local; individual DBs (nextcloud, immich, …).
-# DB credentials from 1Password (secret immich-db-credentials). See README for dependencies and deployment hold-off.
+# DB credentials: same 1Password item as Postgres cluster (postgresql / password) via External Secrets → secret immich-db-credentials.
 
 # ---- Immich (official subchart) ----
 immich:
@@ -91,10 +91,19 @@ immich:
         type: emptyDir
         accessMode: ReadWriteOnce
 
-# ---- 1Password: sync item into K8s secret for Immich DB credentials (external Postgres) ----
+# ---- DB credentials: same source as Postgres cluster (1Password item "postgresql", property "password") ----
+externalSecrets:
+  dbCredentials:
+    enabled: true
+    secretName: immich-db-credentials
+    refreshInterval: 1h
+    secretStoreRef:
+      name: onepassword-connect
+      kind: ClusterSecretStore
+    itemTitle: postgresql
+    passwordProperty: password
+
+# When externalSecrets.dbCredentials.enabled, the secret is created by ESO; do not use onepassworditem for it.
 onepassworditem:
   secrets:
-    immich:
-      - item: vaults/Kubernetes/items/immich-db-credentials
-        name: immich-db-credentials
-        type: Opaque
+    immich: []
