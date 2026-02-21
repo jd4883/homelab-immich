@@ -1,0 +1,109 @@
+# Immich – self-hosted photo and video backup (official chart + external PostgreSQL + Valkey/Redis + 1Password).
+# One database server (same as Nextcloud): postgresql-rw.postgresql.svc.cluster.local; individual DBs (nextcloud, immich, …).
+# DB credentials: same 1Password item as Postgres cluster (postgresql / password) via External Secrets → secret immich-db-credentials.
+
+# ---- Immich (official subchart) ----
+immich:
+  # External PostgreSQL: same host as Nextcloud; individual database "immich". DB_USERNAME/DB_PASSWORD from 1Password.
+  controllers:
+    main:
+      containers:
+        main:
+          env:
+            DB_HOSTNAME: "postgresql-rw.postgresql.svc.cluster.local"
+            DB_PORT: "5432"
+            DB_DATABASE_NAME: immich
+            TZ: US/Pacific
+          envFrom:
+            - secretRef:
+                name: immich-db-credentials
+
+  # Chart's "immich" block: persistence, metrics, configuration
+  immich:
+    persistence:
+      # Share nextcloud-data PVC with Nextcloud: same volume, fixed subPath so Immich library lives in a dedicated directory and does not conflict with Nextcloud files. Create the subPath directory on the volume if needed (e.g. via init job or manually).
+      library:
+        existingClaim: nextcloud-data
+        subPath: immich-library
+      configuration: {}
+      configurationKind: ConfigMap
+    metrics:
+      enabled: false
+
+  server:
+    enabled: true
+    controllers:
+      main:
+        containers:
+          main:
+            image:
+              repository: ghcr.io/immich-app/immich-server
+              pullPolicy: IfNotPresent
+            envFrom:
+              - secretRef:
+                  name: immich-db-credentials
+        ingress:
+          main:
+            enabled: true
+            ingressClassName: nginx
+            annotations:
+              nginx.ingress.kubernetes.io/proxy-body-size: "0"
+              external-dns.alpha.k8s.io/target: expectedbehaviors.com
+              nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+              nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+            hosts:
+              - host: immich.expectedbehaviors.com
+                paths:
+                  - path: /
+                    pathType: Prefix
+            tls: []
+    service:
+      main:
+        identifier: main
+
+  machine-learning:
+    enabled: true
+    controllers:
+      main:
+        containers:
+          main:
+            image:
+              repository: ghcr.io/immich-app/immich-machine-learning
+              pullPolicy: IfNotPresent
+            env:
+              TRANSFORMERS_CACHE: /cache
+              HF_XET_CACHE: /cache/huggingface-xet
+              MPLCONFIGDIR: /cache/matplotlib-config
+        persistence:
+          cache:
+            enabled: true
+            size: 10Gi
+            type: emptyDir
+            accessMode: ReadWriteMany
+
+  # In-chart Valkey (Redis). Set valkey.enabled: false and set REDIS_HOSTNAME (and optional REDIS_PORT/REDIS_PASSWORD) in env to use a dedicated external Redis.
+  valkey:
+    enabled: true
+    persistence:
+      data:
+        enabled: true
+        size: 1Gi
+        type: emptyDir
+        accessMode: ReadWriteOnce
+
+# ---- DB credentials: same source as Postgres cluster (1Password item "postgresql", property "password") ----
+externalSecrets:
+  dbCredentials:
+    enabled: true
+    secretName: immich-db-credentials
+    refreshInterval: 1h
+    secretStoreRef:
+      name: onepassword-connect
+      kind: ClusterSecretStore
+    itemTitle: postgresql
+    passwordProperty: password
+
+# When externalSecrets.dbCredentials.enabled, the secret is created by ESO; do not use onepassworditem for it.
+onepassworditem:
+  secrets:
+    immich: []
