@@ -20,7 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'release' || github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     permissions:
-      contents: write
+      contents: write   # edit release body
+      pull-requests: read   # list PRs for commit (gh api .../commits/SHA/pulls)
     steps:
       - uses: actions/checkout@v4
         with:
