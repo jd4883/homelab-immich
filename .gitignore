@@ -2,3 +2,4 @@ charts/
 Chart.lock
 PR_DESCRIPTION*.md
 .DS_Store
+requirements.lock
