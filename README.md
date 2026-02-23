@@ -2,7 +2,7 @@
 
 > **Not ready for deployment yet.** The ArgoCD application for Immich is commented out. Do not enable it until external PostgreSQL (and other dependencies below) are in place and values are set. See [Dependencies (have these before deploying)](#dependencies-have-these-before-deploying) and [Deployment hold-off (ArgoCD)](#deployment-hold-off-argocd).
 
-Immich runs on Kubernetes via the [official Immich Helm chart](https://github.com/immich-app/immich-charts) with **external PostgreSQL**, in-chart **Valkey** (Redis), and **1Password-backed secrets** for DB credentials. This chart does **not** deploy PostgreSQL; you must have an external database and other dependencies ready before deploying.
+Immich runs on Kubernetes via the [official Immich Helm chart](https://github.com/immich-app/immich-charts) with **external PostgreSQL**, in-chart **Valkey** (Redis), and **1Password-backed secrets** for DB credentials. This chart does **not** deploy PostgreSQL; you must have an external database and other dependencies ready before deploying. **Volumes** (e.g. library PVC) **are defined in Longhorn** or as existingClaims.
 
 ---
 
@@ -74,6 +74,27 @@ No separate 1Password item is needed; see [DB credentials (same as Postgres clus
 The Immich application is **not deployed by default**. In `homelab/helm/argocd/terraform/argocd-config/configs/config.yaml`, the **immich** project has `applications: []` and the application entry is commented out.
 
 When dependencies are ready (external PostgreSQL with database `immich`, PVC, ESO + postgresql 1Password item, and optionally external Redis), uncomment the application block so ArgoCD syncs the chart. Ensure `DB_HOSTNAME` (and any other DB/Redis overrides) are set in values or a value file used by ArgoCD.
+
+Example Argo CD Application (adjust repo/path/namespace):
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: immich
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jd4883/homelab-immich
+    path: .
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: immich
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+```
 
 ---
 
