@@ -105,5 +105,6 @@ externalSecrets:
 
 # When externalSecrets.dbCredentials.enabled, the secret is created by ESO; do not use onepassworditem for it.
 onepassworditem:
-  secrets:
-    immich: []
+  enabled: false
+  defaultVault: Kubernetes
+  items: []
