@@ -33,4 +33,4 @@ jobs:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           release_tag: ${{ github.event.inputs.release_tag }}
-          prompt_instruction: "Include concrete datapoints: chart version, Immich version, migration notes, breaking changes, and key values (DB, storage, ingress)."
+          prompt_instruction: "Include concrete datapoints: chart version, Immich version, migration notes, breaking changes, and key values (storage, database, upload)."
