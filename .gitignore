@@ -1,5 +1,31 @@
-charts/
-Chart.lock
-PR_DESCRIPTION*.md
+# Standardized .gitignore: tailored to this repo's contents.
+
+# ---- OS / editor cruft ----
 .DS_Store
+**/.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+
+# ---- Helm: vendored subcharts, archives, lockfiles (resolved in CI) ----
+charts/
+**/charts/
+*.tgz
+Chart.lock
+**/Chart.lock
 requirements.lock
+
+# ---- AI / PR / review scratch: drafts that never belong in the repo ----
+PR_*.md
+PR_*.txt
+PR_BODY*
+REVIEW_CONSISTENCY*.md
+*CONSISTENCY-REPORT*
+migration.md
+MIGRATION.md
+RUN-TO-STRIP*.md
+*_upstream_values.txt
+.cruft.json
