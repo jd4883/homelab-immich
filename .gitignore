@@ -1,7 +1,4 @@
-# Standard .gitignore for jd4883 / expectedbehaviors Helm chart repos.
-# Prefer glob patterns over static paths so nested charts (e.g. deploy/helm/**)
-# and future cruft are caught automatically. To keep a normally-ignored file in
-# one repo, add a negation below the relevant block, e.g.  !poetry.lock
+# Standardized .gitignore: tailored to this repo's contents.
 
 # ---- OS / editor cruft ----
 .DS_Store
@@ -13,25 +10,15 @@ Desktop.ini
 *~
 .idea/
 
-# ---- Helm: vendored subcharts & packaged archives (resolved in CI) ----
+# ---- Helm: vendored subcharts, archives, lockfiles (resolved in CI) ----
 charts/
 **/charts/
 *.tgz
+Chart.lock
+**/Chart.lock
+requirements.lock
 
-# ---- Lock files (Chart.lock, requirements.lock, *.lock) ----
-# Helm deps are resolved at render/CI time; never commit lockfiles here.
-*.lock
-**/*.lock
-
-# ---- Terraform (immutable: never commit state, provider cache, or lock) ----
-**/.terraform/
-*.tfstate
-*.tfstate.*
-.terraform.lock.hcl
-*.tfvars
-!*.tfvars.example
-
-# ---- AI / PR / review scratch — drafts that never belong in the repo ----
+# ---- AI / PR / review scratch: drafts that never belong in the repo ----
 PR_*.md
 PR_*.txt
 PR_BODY*
