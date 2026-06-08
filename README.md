@@ -1,5 +1,7 @@
 # Immich (self-hosted photo and video backup)
 
+Values-only instantiation for Argo CD. Chart: expectedbehaviors/immich. This repo supplies values.yaml only.
+
 > **Not ready for deployment yet.** The ArgoCD application for Immich is commented out. Do not enable it until external PostgreSQL (and other dependencies below) are in place and values are set. See [Dependencies (have these before deploying)](#dependencies-have-these-before-deploying) and [Deployment hold-off (ArgoCD)](#deployment-hold-off-argocd).
 
 Immich runs on Kubernetes via the [official Immich Helm chart](https://github.com/immich-app/immich-charts) with **external PostgreSQL**, in-chart **Valkey** (Redis), and **1Password-backed secrets** for DB credentials. This chart does **not** deploy PostgreSQL; you must have an external database and other dependencies ready before deploying. **Volumes** (e.g. library PVC) **are defined in Longhorn** or as existingClaims.
@@ -98,10 +100,20 @@ spec:
 
 ---
 
+## Render & validation
+
+> `helm repo add immich https://expectedbehaviors.github.io/immich`
+> `helm repo update`
+> `helm template release immich/immich -f values.yaml`
+
+| Check | Result |
+|-------|--------|
+| `helm template` with public chart + homelab values | ✅ (see PR proof) |
+
 ## Install (when dependencies are ready)
 
-- **Helm:** From this directory run `helm dependency update`, then e.g. `helm install immich . -n immich --create-namespace -f values.yaml`. The chart creates `immich-db-credentials` via ExternalSecret from the **postgresql** 1Password item. Ensure the Postgres cluster and ESO are in place and the `immich` database exists.
-- **ArgoCD:** Uncomment the immich application in config as above; point source repo to this chart (e.g. `homelab-immich`), path `.`. Use the same namespace; ESO will create the secret from the postgresql item.
+- **Helm:** `helm repo add immich https://expectedbehaviors.github.io/immich && helm repo update`, then e.g. `helm install immich immich/immich -n immich --create-namespace -f values.yaml`. The chart creates `immich-db-credentials` via ExternalSecret from the **postgresql** 1Password item. Ensure the Postgres cluster and ESO are in place and the `immich` database exists.
+- **ArgoCD:** Uncomment the immich application in config as above; point values source to this repo (`homelab-immich`) and chart to `expectedbehaviors/immich`. Use the same namespace; ESO will create the secret from the postgresql item.
 
 ---
 
